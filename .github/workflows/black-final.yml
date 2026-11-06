@@ -1,0 +1,59 @@
+name: Black Final
+on:
+  workflow_dispatch:
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install NDK and CMake
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
+
+      - name: Patch repositories and dependencies
+        run: |
+          rm -f local.properties
+
+          grep -rl "jcenter()" --include=*.gradle --include=*.kts . | xargs -r sed -i 's/jcenter()/mavenCentral()/g'
+
+          sed -i "s#com.mindorks.android:prdownloader:0.6.0#com.github.MindorksOpenSource:PRDownloader:0.6.0#" app/build.gradle
+          sed -i "s#com.github.smarteist:autoimageslider:[0-9.]*#com.github.smarteist:Android-Image-Slider:1.4.0#" app/build.gradle
+          sed -i "s#com.hzy:un7zip:+#com.hzy:un7zip:1.6.0#" app/build.gradle
+
+          cat > $HOME/repos.gradle <<'EOF'
+          allprojects {
+            buildscript {
+              repositories {
+                google()
+                mavenCentral()
+                maven { url 'https://jitpack.io' }
+                maven { url 'https://maven.aliyun.com/repository/jcenter' }
+              }
+            }
+            repositories {
+              google()
+              mavenCentral()
+              maven { url 'https://jitpack.io' }
+              maven { url 'https://maven.aliyun.com/repository/jcenter' }
+            }
+          }
+          EOF
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --init-script $HOME/repos.gradle --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlackRussia-debug-apk
+          path: app/build/outputs/apk/**/*.apk
